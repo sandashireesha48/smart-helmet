@@ -1,0 +1,106 @@
+
+
+#include <SoftwareSerial.h>
+#include <TinyGPS++.h>
+
+// -------- Pin Definitions --------
+#define TRIG 2
+#define ECHO 3
+#define VIB 4
+#define RELAY 5
+#define LED 6
+#define MQ3 A0
+
+// GPS
+SoftwareSerial gpsSerial(8, 9); // RX, TX
+TinyGPSPlus gps;
+
+// Variables
+long duration;
+int distance;
+int alcoholValue;
+bool helmet = false;
+bool drunk = false;
+bool accident = false;
+
+void setup() {
+  Serial.begin(9600);
+  gpsSerial.begin(9600);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+  pinMode(VIB, INPUT);
+  pinMode(RELAY, OUTPUT);
+  pinMode(LED, OUTPUT);
+  digitalWrite(RELAY, LOW); // Engine OFF initially
+  digitalWrite(LED, LOW);
+  Serial.println("SMART HELMET SYSTEM STARTED");
+}
+
+void loop() {
+  // -------- HELMET DETECTION --------
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  duration = pulseIn(ECHO, HIGH);
+  distance = duration * 0.034 / 2;
+  helmet = (distance > 0 && distance < 10); // Adjust threshold
+
+  // -------- ALCOHOL DETECTION --------
+  alcoholValue = analogRead(MQ3);
+  drunk = (alcoholValue > 400); // Adjust if needed
+
+  // -------- VIBRATION (ACCIDENT) --------
+  accident = (digitalRead(VIB) == HIGH);
+
+  // -------- RELAY CONTROL --------
+  digitalWrite(RELAY, (helmet && !drunk) ? HIGH : LOW);
+
+  // -------- LED CONTROL --------
+  digitalWrite(LED, helmet ? HIGH : LOW);
+
+  // -------- GPS READING --------
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read())) {
+      if (gps.location.isValid()) {
+        Serial.print("Latitude: ");
+        Serial.println(gps.location.lat(), 6);
+        Serial.print("Longitude: ");
+        Serial.println(gps.location.lng(), 6);
+      } else {
+        Serial.println("GPS Fix: NO");
+      }
+    }
+  }
+
+  // -------- SERIAL OUTPUT --------
+  Serial.println("------ SYSTEM STATUS ------");
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+  Serial.print("Helmet: ");
+  Serial.println(helmet ? "WORN" : "NOT WORN");
+  Serial.print("Alcohol Value: ");
+  Serial.println(alcoholValue);
+  Serial.print("Alcohol Status: ");
+  Serial.println(drunk ? "DRUNK" : "SAFE");
+  Serial.print("Vibration: ");
+  Serial.println(accident ? "ACCIDENT DETECTED" : "NORMAL");
+
+  // -------- ACCIDENT ALERT --------
+  if (accident) {
+    Serial.println("⚠️ ACCIDENT DETECTED!");
+    Serial.print("Location: ");
+    if (gps.location.isValid()) {
+      Serial.print(gps.location.lat(), 6);
+      Serial.print(", ");
+      Serial.println(gps.location.lng(), 6);
+    } else {
+      Serial.println("GPS NOT AVAILABLE");
+    }
+    delay(3000);
+  }
+  Serial.println("----------------------------\n");
+  delay(500);
+}
